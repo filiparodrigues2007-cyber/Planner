@@ -68,6 +68,7 @@ textarea{min-height:200px;font:12px/1.4 ui-monospace,Menlo,monospace}
 .ex{border:1px dashed var(--pink);color:var(--ink);background:var(--card)}
 .chip.tk{background:var(--card);color:var(--ink);border:1px solid var(--line)}
 .od{color:var(--warn)}
+.xm{background:var(--card);border:2px solid var(--pink);color:var(--ink);font-weight:600}
 .swr{display:flex;flex-wrap:wrap;align-items:center;margin-top:6px}.sw{width:26px;height:26px;border-radius:50%;border:2px solid rgba(43,27,36,.14);cursor:pointer;padding:0;margin:3px}.sw.on{outline:2px solid var(--ink);outline-offset:2px}.swc{width:30px;height:30px;padding:0;border:0;background:none;margin-left:4px}
 .lg{display:inline-flex;align-items:center;gap:7px;border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:4px 13px 4px 9px;font:500 12px var(--sans);cursor:pointer;margin:0 6px 6px 0}.lg i{width:13px;height:13px;border-radius:50%;background:var(--c);border:1px solid rgba(43,27,36,.2)}
 .bt{border-collapse:collapse;width:100%}.bt td{border:2px solid var(--line);padding:0}.bt input{border:0;border-radius:0;background:transparent;padding:9px 10px;min-width:96px}.bt tr:first-child input{font-weight:600;background:var(--bg)}
@@ -118,7 +119,7 @@ function color(c){var o=S.cfg&&S.cfg.cc&&S.cfg.cc[c];if(o)return o;var k=courseL
 function V(i){return document.getElementById(i).value}
 function A(id){return S.a.filter(function(x){return x.id===id})[0]}
 
-function addA(){var c=V('ac').trim(),d=V('ad');if(!c||!d)return;var o={course:c,type:V('at'),date:d,weight:+V('aw')||0,diff:+V('af'),prep:+V('ap')||0};if(E.k==='a'&&S.a[E.i])Object.assign(S.a[E.i],o);else{o.id=id();S.a.push(o)}E={};save();draw()}
+function addA(){var c=V('ac').trim(),d=V('ad');if(!c||!d)return;var o={course:c,type:V('at'),date:d,weight:+V('aw')||0,diff:+V('af'),prep:+V('ap')||0,time:V('atm')};if(E.k==='a'&&S.a[E.i])Object.assign(S.a[E.i],o);else{o.id=id();S.a.push(o)}E={};save();draw()}
 function addM(){var n=V('mn').trim(),h=+V('mh');if(!n||!V('ma')||!h)return;var o={aid:V('ma'),name:n,hours:h},fs=[].slice.call(document.getElementById('mf').files||[]),lk=V('ml').trim(),t;if(E.k==='m'&&S.m[E.i]){t=S.m[E.i];Object.assign(t,o)}else{o.id=id();o.done=false;S.m.push(o);t=o}t.files=t.files||[];t.links=t.links||[];if(/^https?:\/\//i.test(lk))t.links.push(lk);E={};Promise.all(fs.map(function(f){var fid=id();return idbPut(fid,f).then(function(){t.files.push({id:fid,name:f.name,size:f.size})})})).catch(function(){}).then(function(){save();draw()})}
 function addV(){var a=tmin(V('vs')),b=tmin(V('ve'));if(!(b>a))return;var o={day:+V('vd'),s:a,e:b};if(E.k==='v'&&S.v[E.i])Object.assign(S.v[E.i],o);else S.v.push(o);E={};save();draw()}
 function del(k,i){E={};if(k==='m')((S.m[i]||{}).files||[]).forEach(function(f){idbDel(f.id).catch(function(){})});if(k==='a'){var x=S.a[i].id;S.m=S.m.filter(function(m){return m.aid!==x})}S[k].splice(i,1);save();draw()}
@@ -146,15 +147,15 @@ function plan(){
   daySlots(d).forEach(function(b){
    var t=b.s;
    while(t<b.e){
-    var best=emPick(d,q),bs=-1;
+    var best=emPick(d,q,t,b.aid),bs=-1;
     if(!best)S.a.forEach(function(a){
-     var dl=Math.round((pd(a.date)-d)/864e5);if(dl<=(S.rest===false?0:1))return;
+     var dl=Math.round((pd(a.date)-d)/864e5),cut=1440;if(b.aid&&b.aid!==a.id)return;if(dl<=(S.rest===false?0:1)){if(dl===0&&a.time){cut=tmin(a.time)-60;if(t>=cut)return}else return}
      var pr=a.prep==null?7:a.prep,it=null,room=0,urgent=dl<=3;
-     q[a.id].forEach(function(x){if(it||x.rem<=0)return;if(x.prep){if(dl>pr)return;it=x;room=1e9;return}var used=dm[a.id+'|'+x.name]||0,left=pace[a.id]-mm[a.id];if((used<cap&&left>0)||urgent){it=x;room=urgent?1e9:Math.min(cap-used,left)}});
+     q[a.id].forEach(function(x){if(it||x.rem<=0)return;if(x.prep){if(dl>pr)return;it=x;room=1e9;return}var used=dm[a.id+'|'+x.name]||0,left=pace[a.id]-mm[a.id];if((used<cap&&(left>0||b.x))||urgent){it=x;room=urgent?1e9:Math.min(cap-used,b.x?1e9:left)}});
      if(!it)return;
      var rem=q[a.id].reduce(function(s,x){return s+x.rem},0)/60,gap=last2[a.id]==null?3:Math.min(di-last2[a.id],6);
      var sc=Math.max(a.weight,1)*a.diff*rem/(dl+1)*(1+0.35*gap)/(1+(am[a.id]||0)/120);
-     if(sc>bs){bs=sc;best={a:a,it:it,room:room}}
+     if(sc>bs){bs=sc;best={a:a,it:it,room:Math.min(room,cut-t)}}
     });
     if(!best)break;
     var len=Math.min(b.e-t,best.it.rem,best.room);
@@ -185,12 +186,13 @@ function viewSetup(){
  '<label>Course<input id="ac" placeholder="e.g. Macroeconomics"></label>'+
  '<label>Type<select id="at"><option>Exam</option><option>Test</option><option>Assignment</option></select></label>'+
  '<label>Date<input id="ad" type="date"></label>'+
+ '<label>Start time (optional)<input id="atm" type="time"></label>'+
  '<label>Weight (% of grade)<input id="aw" type="number" min="0" max="100" value="30"></label>'+
  '<label>Difficulty<select id="af"><option value="1">1 Easy</option><option value="2">2</option><option value="3" selected>3 Medium</option><option value="4">4</option><option value="5">5 Hard</option></select></label>'+
  '<label>Final prep (days)<input id="ap" type="number" min="0" max="30" value="7"></label>'+
  '<button class="go" onclick="addA()">Add assessment</button></div>';
  if(!S.a.length)h+='<p class="empty">No assessments yet. Add your first test or exam.</p>';
- S.a.forEach(function(a,i){h+='<div class="item"><span class="dot" style="background:'+color(a.course)+'"></span><div class="t">'+esc(a.course)+' '+esc(a.type)+'<br><small>'+nice(pd(a.date))+' · '+a.weight+'% · difficulty '+a.diff+' · '+(a.prep==null?7:a.prep)+' prep days</small></div><button class="x" aria-label="Edit" onclick="edit(\'a\','+i+')">Edit</button><button class="x" aria-label="Delete" onclick="del(\'a\','+i+')">\u00d7</button></div>'});
+ S.a.forEach(function(a,i){h+='<div class="item"><span class="dot" style="background:'+color(a.course)+'"></span><div class="t">'+esc(a.course)+' '+esc(a.type)+'<br><small>'+nice(pd(a.date))+(a.time?' at '+a.time:'')+' · '+a.weight+'% · difficulty '+a.diff+' · '+(a.prep==null?7:a.prep)+' prep days</small></div><button class="x" aria-label="Edit" onclick="edit(\'a\','+i+')">Edit</button><button class="x" aria-label="Delete" onclick="del(\'a\','+i+')">\u00d7</button></div>'});
  h+='</section><section class="card"><h2>2. Materials for each assessment</h2>';
  if(!S.a.length)h+='<p class="empty">Add an assessment first.</p>';
  else{
@@ -243,8 +245,8 @@ function buildIcs(o){
  function ev(uid,sum,desc,a,b,all,alarm){L.push('BEGIN:VEVENT','UID:'+uid+'@planner','DTSTAMP:'+st,all?'DTSTART;VALUE=DATE:'+a:'DTSTART:'+a,all?'DTEND;VALUE=DATE:'+b:'DTEND:'+b,'SUMMARY:'+icsEsc(sum));if(desc)L.push('DESCRIPTION:'+icsEsc(desc));if(alarm)L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+icsEsc(sum),'TRIGGER:'+alarm,'END:VALARM');L.push('END:VEVENT')}
  var nx=function(k){var d=pd(k);return icsD(new Date(d.getFullYear(),d.getMonth(),d.getDate()+1))};
  if(o.blocks)plan().out.forEach(function(x){ev('blk-'+hsh(ymd(x.date)+x.s+x.a.id+x.name),'Study: '+x.a.course+' - '+x.name,'For '+x.a.type+' on '+x.a.date,icsDT(x.date,x.s),icsDT(x.date,x.e),0,o.rem>0?'-PT'+o.rem+'M':'')});
- if(o.events)(S.ev||[]).filter(function(e){return e.src!=='ics'}).forEach(function(e){ev('ev-'+(e.id||hsh(e.title+e.date)),e.title,'',icsDT(pd(e.date),e.s),icsDT(pd(e.date),e.e),0,'')});
- if(o.tests)S.a.forEach(function(a){ev('as-'+a.id,a.type+': '+a.course,'Weight '+a.weight+'%',icsD(pd(a.date)),nx(a.date),1,'-PT15H')});
+ if(o.events)(S.ev||[]).filter(function(e){return e.src!=='ics'&&e.kind!=='free'}).forEach(function(e){ev('ev-'+(e.id||hsh(e.title+e.date)),e.title,'',icsDT(pd(e.date),e.s),icsDT(pd(e.date),e.e),0,'')});
+ if(o.tests)S.a.forEach(function(a){if(a.time)ev('as-'+a.id,a.type+': '+a.course,'Weight '+a.weight+'%',icsDT(pd(a.date),tmin(a.time)),icsDT(pd(a.date),Math.min(tmin(a.time)+90,1439)),0,'-PT90M');else ev('as-'+a.id,a.type+': '+a.course,'Weight '+a.weight+'%',icsD(pd(a.date)),nx(a.date),1,'-PT15H')});
  if(o.tasks)(S.t||[]).forEach(function(t){if(t.due&&!t.done)ev('td-'+t.id,'To-do: '+t.title,'',icsD(pd(t.due)),nx(t.due),1,'')});
  if(o.projects)(S.pj||[]).forEach(function(p){if(p.deadline)ev('pj-'+p.id,'Project deadline: '+p.name,'',icsD(pd(p.deadline)),nx(p.deadline),1,'-PT15H');p.ms.forEach(function(m){if(m.due&&!m.done)ev('ms-'+m.id,p.name+': '+m.t,'',icsD(pd(m.due)),nx(m.due),1,'')})});
  L.push('END:VCALENDAR');return L.map(icsFold).join('\r\n')+'\r\n'}
@@ -291,25 +293,31 @@ function viewExportCsv(){
 function edit(k,i){E={k:k,i:i};tab={t:'tasks',hb:'habits',pj:'projects'}[k]||'setup';draw()}
 function sv(i,v){var e=document.getElementById(i);if(e)e.value=v}
 function applyEdit(){var k=E.k;if(!k)return;var x=S[k][E.i];if(!x){E={};return}
- if(k==='a'){sv('ac',x.course);sv('at',x.type);sv('ad',x.date);sv('aw',x.weight);sv('af',x.diff);sv('ap',x.prep==null?7:x.prep)}
+ if(k==='a'){sv('ac',x.course);sv('at',x.type);sv('ad',x.date);sv('aw',x.weight);sv('af',x.diff);sv('ap',x.prep==null?7:x.prep);sv('atm',x.time||'')}
  if(k==='m'){sv('ma',x.aid);sv('mn',x.name);sv('mh',x.hours)}
  if(k==='v'){sv('vd',x.day);sv('vs',tm(x.s));sv('ve',tm(x.e))}
  if(k==='hb'){sv('hn',x.name);sv('ht',x.target)}
  if(k==='pj'){sv('pjn',x.name);sv('pjd',x.deadline||'');sv('pjt',x.notes||'')}
  if(k==='t'){sv('tt',x.title);sv('td',x.due||'');sv('tp',x.prio)}
- if(k==='ev'){sv('et',x.title);sv('ed',x.date);sv('es',tm(x.s));sv('ee',tm(x.e));sv('ek',x.kind)}
+ if(k==='ev'){sv('et',x.title);sv('ed',x.date);sv('es',tm(x.s));sv('ee',tm(x.e));sv('ek',x.kind);sv('eka',x.aid||'')}
  var b=document.querySelector('button.go[onclick="'+{a:'addA',m:'addM',v:'addV',ev:'addE',t:'addT',hb:'addH',pj:'addP'}[k]+'()"]');
  if(b){b.textContent='Save changes';var c=document.createElement('button');c.textContent='Cancel';c.className='x';c.onclick=function(){E={};draw()};b.after(c);b.scrollIntoView({block:'center'})}}
 function editEv(i){edit('ev',i)}
 function delEv(i){del('ev',i)}
-function addE(){var t=V('et').trim(),d=V('ed'),a=tmin(V('es')),b=tmin(V('ee'));if(!t||!d||!(b>a))return;var o={title:t,date:d,s:a,e:b,kind:V('ek')};S.ev=S.ev||[];if(E.k==='ev'&&S.ev[E.i])Object.assign(S.ev[E.i],o);else{o.id=id();S.ev.push(o)}E={};save();draw()}
-function daySlots(d){var k=ymd(d),sl=S.v.filter(function(v){return v.day===d.getDay()}).map(function(v){return{s:v.s,e:v.e}}),ev=(S.ev||[]).filter(function(e){return e.date===k});
- ev.filter(function(e){return e.kind!=='free'}).concat((S.sl||[]).filter(function(l){return l.date===k})).forEach(function(e){var n=[];sl.forEach(function(x){if(e.e<=x.s||e.s>=x.e){n.push(x);return}if(e.s>x.s)n.push({s:x.s,e:e.s});if(e.e<x.e)n.push({s:e.e,e:x.e})});sl=n});
- ev.filter(function(e){return e.kind==='free'}).forEach(function(e){sl.push({s:e.s,e:e.e})});
- sl.sort(function(a,b){return a.s-b.s});var m=[];sl.forEach(function(x){var l=m[m.length-1];if(l&&x.s<=l.e)l.e=Math.max(l.e,x.e);else m.push({s:x.s,e:x.e})});return m}
-function viewEvents(){S.ev=S.ev||[];var h=`<section class='card'><h2>4. One-off events</h2><p class='sub'>Something that happens once: a trip, an appointment, a free afternoon.</p><div class='row'><label>Title<input id='et' placeholder='e.g. Dentist'></label><label>Date<input id='ed' type='date'></label><label>From<input id='es' type='time' value='10:00'></label><label>To<input id='ee' type='time' value='11:00'></label><label>Effect<select id='ek'><option value='busy'>Busy: no studying</option><option value='free'>Extra study time</option></select></label><button class='go' onclick='addE()'>Add event</button></div>`;
+function addE(){var t=V('et').trim(),d=V('ed'),a=tmin(V('es')),b=tmin(V('ee'));if(!t||!d||!(b>a))return;var o={title:t,date:d,s:a,e:b,kind:V('ek'),aid:V('ek')==='free'?V('eka'):''};S.ev=S.ev||[];if(E.k==='ev'&&S.ev[E.i])Object.assign(S.ev[E.i],o);else{o.id=id();S.ev.push(o)}E={};save();draw()}
+function subOpts(){return'<option value="">Auto: planner chooses</option>'+S.a.map(function(a){return'<option value="'+a.id+'">'+esc(a.course)+' '+esc(a.type)+'</option>'}).join('')}
+function daySlots(d){var k=ymd(d),ev=(S.ev||[]).filter(function(e){return e.date===k}),lg=(S.sl||[]).filter(function(l){return l.date===k}),
+ cut=function(list,e){var n=[];list.forEach(function(x){if(e.e<=x.s||e.s>=x.e){n.push(x);return}if(e.s>x.s)n.push({s:x.s,e:e.s,aid:x.aid,x:x.x});if(e.e<x.e)n.push({s:e.e,e:x.e,aid:x.aid,x:x.x})});return n},
+ busy=ev.filter(function(e){return e.kind!=='free'}),free=ev.filter(function(e){return e.kind==='free'}),
+ sl=S.v.filter(function(v){return v.day===d.getDay()}).map(function(v){return{s:v.s,e:v.e}});
+ busy.forEach(function(e){sl=cut(sl,e)});free.forEach(function(e){sl=cut(sl,e)});
+ sl.sort(function(a,b){return a.s-b.s});var m=[];sl.forEach(function(x){var l=m[m.length-1];if(l&&x.s<=l.e)l.e=Math.max(l.e,x.e);else m.push({s:x.s,e:x.e})});
+ var all=m.concat(free.map(function(e){return{s:e.s,e:e.e,aid:e.aid||'',x:1}}));
+ lg.forEach(function(e){all=cut(all,e)});
+ return all.sort(function(a,b){return a.s-b.s})}
+function viewEvents(){S.ev=S.ev||[];var h=`<section class='card'><h2>4. One-off events</h2><p class='sub'>Something that happens once: a trip, an appointment, a free afternoon.</p><div class='row'><label>Title<input id='et' placeholder='e.g. Dentist'></label><label>Date<input id='ed' type='date'></label><label>From<input id='es' type='time' value='10:00'></label><label>To<input id='ee' type='time' value='11:00'></label><label>Effect<select id='ek'><option value='busy'>Busy: no studying</option><option value='free'>Extra study session</option></select></label><label>Subject (study sessions)<select id='eka'>${subOpts()}</select></label><button class='go' onclick='addE()'>Add event</button></div>`;
  if(!S.ev.length)h+=`<p class='empty'>No one-off events yet.</p>`;
- S.ev.forEach(function(e,i){h+=`<div class='item'><div class='t'>${esc(e.title)}<br><small>${nice(pd(e.date))} · ${tm(e.s)}–${tm(e.e)} · ${e.kind==='free'?'extra study time':'busy'}</small></div><button class='x' aria-label='Edit' onclick='editEv(${i})'>Edit</button><button class='x' aria-label='Delete' onclick='delEv(${i})'>×</button></div>`});
+ S.ev.forEach(function(e,i){h+=`<div class='item'><div class='t'>${esc(e.title)}<br><small>${nice(pd(e.date))} · ${tm(e.s)}–${tm(e.e)} · ${e.kind==='free'?'study session'+(e.aid&&A(e.aid)?' · '+esc(A(e.aid).course):' · subject chosen by the planner'):'busy'}</small></div><button class='x' aria-label='Edit' onclick='editEv(${i})'>Edit</button><button class='x' aria-label='Delete' onclick='delEv(${i})'>×</button></div>`});
  return h+'</section>'}
 function wk(n){W=new Date(W.getFullYear(),W.getMonth(),W.getDate()+7*n);draw()}
 function viewCal(){
@@ -318,14 +326,15 @@ function viewCal(){
  for(i=0;i<7;i++)days.push(new Date(W.getFullYear(),W.getMonth(),W.getDate()+i));
  var ks=days.map(ymd),lo=480,hi=1200,it=[];
  p.out.forEach(function(x){var k=ymd(x.date);if(ks.indexOf(k)>=0)it.push({k:k,s:x.s,e:x.e,t:x.a.course+': '+x.name,c:color(x.a.course),cls:'st'})});
- (S.ev||[]).forEach(function(e){if(ks.indexOf(e.date)>=0)it.push({k:e.date,s:e.s,e:e.e,t:e.title,cls:e.kind==='free'?'ex':'bz'})});
+ (S.ev||[]).forEach(function(e){if(ks.indexOf(e.date)<0)return;if(e.kind==='free'&&p.out.some(function(x){return ymd(x.date)===e.date&&x.s<e.e&&x.e>e.s}))return;it.push({k:e.date,s:e.s,e:e.e,t:e.title,cls:e.kind==='free'?'ex':'bz'})});
+ S.a.forEach(function(a){if(a.time&&ks.indexOf(a.date)>=0)it.push({k:a.date,s:tmin(a.time),e:Math.min(tmin(a.time)+90,1439),t:'EXAM '+a.course,cls:'xm'})});
  it.forEach(function(x){lo=Math.min(lo,Math.floor(x.s/60)*60);hi=Math.max(hi,Math.ceil(x.e/60)*60)});
  var H=(hi-lo)/60*40,td=ymd(new Date());
  var h=`<div class='cw'><div class='cwm'><section class='card'><div class='row' style='align-items:center'><button class='go' onclick='wk(-1)'>Previous</button><button class='go' onclick='W=mon(new Date());draw()'>This week</button><button class='go' onclick='wk(1)'>Next</button><b style='flex:2;min-width:140px'>${nice(days[0])} to ${nice(days[6])}</b></div>${legendHtml()}<div style='overflow-x:auto'><div class='cal'>`;
- h+='<div></div>'+days.map(function(d,i){var k=ks[i],ch=S.a.filter(function(a){return a.date===k}).map(function(a){return`<div class='chip' style='--c:${color(a.course)}'>${esc(a.course)} ${esc(a.type)}</div>`}).join('')+(S.t||[]).filter(function(t){return t.due===k&&!t.done}).map(function(t){return`<div class='chip tk'>${esc(t.title)}</div>`}).join('')+msChips(k);return`<div class='ch${k===td?' tdy':''}${k===(CD||td)?' sel':''}' data-k='${k}' onclick='selDay(this.dataset.k)'><b>${DAYS[d.getDay()].slice(0,3)} ${d.getDate()}</b>${ch}</div>`}).join('');
+ h+='<div></div>'+days.map(function(d,i){var k=ks[i],ch=S.a.filter(function(a){return a.date===k}).map(function(a){return`<div class='chip' style='--c:${color(a.course)}'>${esc(a.course)} ${esc(a.type)}${a.time?' '+a.time:''}</div>`}).join('')+(S.t||[]).filter(function(t){return t.due===k&&!t.done}).map(function(t){return`<div class='chip tk'>${esc(t.title)}</div>`}).join('')+msChips(k);return`<div class='ch${k===td?' tdy':''}${k===(CD||td)?' sel':''}' data-k='${k}' onclick='selDay(this.dataset.k)'><b>${DAYS[d.getDay()].slice(0,3)} ${d.getDate()}</b>${ch}</div>`}).join('');
  var hl='';for(var m=lo;m<hi;m+=60)hl+=`<div class='hl'>${p2(m/60)}:00</div>`;
  h+=`<div>${hl}</div>`+days.map(function(d,i){var k=ks[i];return`<div class='cc' style='height:${H}px'>`+it.filter(function(x){return x.k===k}).map(function(x){return`<div class='ev ${x.cls}' style='top:${(x.s-lo)/60*40}px;height:${Math.max((x.e-x.s)/60*40-2,16)}px;${x.c?'--c:'+x.c:''}'><b>${tm(x.s)}</b> ${esc(x.t)}</div>`}).join('')+'</div>'}).join('');
- return h+`</div></div><p class='empty'>Colored blocks are study sessions. Striped blocks are busy events. Dashed blocks are extra study time. Tap a day to see it on the right. Colored labels under a date mark an assessment.</p></section></div>`+dayPanel(p,CD||td)+`</div>`}
+ return h+`</div></div><p class='empty'>Colored blocks are study sessions. Striped blocks are busy events. Dashed blocks are one-off study sessions with nothing left to study. Tap a day to see it on the right. Colored labels under a date mark an assessment.</p></section></div>`+dayPanel(p,CD||td)+`</div>`}
 function addT(){var t=V('tt').trim();if(!t)return;var o={title:t,due:V('td'),prio:+V('tp')},fs=[].slice.call(document.getElementById('tf').files||[]),lk=V('tl').trim(),k;S.t=S.t||[];if(E.k==='t'&&S.t[E.i]){k=S.t[E.i];Object.assign(k,o)}else{o.id=id();o.done=false;S.t.push(o);k=o}k.files=k.files||[];k.links=k.links||[];if(/^https?:\/\//i.test(lk))k.links.push(lk);E={};Promise.all(fs.map(function(f){var fid=id();return idbPut(fid,f).then(function(){k.files.push({id:fid,name:f.name,size:f.size})})})).catch(function(){}).then(function(){save();draw()})}
 function editT(i){edit('t',i)}
 function delT(i){((S.t[i]||{}).files||[]).forEach(function(f){idbDel(f.id).catch(function(){})});del('t',i)}
@@ -453,10 +462,11 @@ function selDay(k){CD=k;draw()}
 function dayPanel(p,k){var d=pd(k),td=ymd(new Date()),bl=p.out.filter(function(x){return ymd(x.date)===k}),lg=(S.sl||[]).filter(function(l){return l.date===k}),all=bl.map(function(x){return{s:x.s,e:x.e,a:x.a,n:x.name,d:0}}).concat(lg.map(function(l){return{s:l.s,e:l.e,a:A(l.aid),n:l.name,d:1,r:l.r}})).sort(function(x,y){return x.s-y.s}),mins=all.reduce(function(s,x){return s+x.e-x.s},0),dn=all.filter(function(x){return x.d&&x.r>0}).length;
  var h=`<aside class='dp'><div class='dpt'>${DAYS[d.getDay()].toLowerCase()}</div><div class='dps'>${nice(d)}</div><div class='row'><div class='st2'>PLANNED<b>${(mins/60).toFixed(1).replace('.0','')}h</b></div><div class='st2'>DONE<b>${dn}/${all.length}</b></div></div>`;
  h+=all.length?all.map(function(x){return`<div class='pc' style='--c:${x.a?color(x.a.course):'#e8dde1'}'><b>${esc(x.n)}</b><br><small>${tm(x.s)} \u00b7 ${x.e-x.s}m${x.a?' \u00b7 '+esc(x.a.course):''}${x.d?' \u00b7 '+(x.r?'done, '+x.r+'/5':'not finished'):''}</small></div>`}).join(''):`<p class='empty'>No study blocks this day.</p>`;
- (S.ev||[]).forEach(function(e,i){if(e.date!==k)return;h+=`<div class='pc bzc'><b>${esc(e.title)}</b><br><small>${tm(e.s)}\u2013${tm(e.e)} \u00b7 ${e.kind==='free'?'extra study time':'busy'}</small><div><button class='att' onclick='editEvC(${i})'>Edit</button><button class='att' onclick='delEv(${i})'>Delete</button></div></div>`});
+ S.a.filter(function(a){return a.date===k}).forEach(function(a){h+=`<div class='pc' style='--c:${color(a.course)};border:2px solid var(--ink)'><b>${esc(a.type)}: ${esc(a.course)}</b><br><small>${a.time?'Starts at '+a.time:'Start time not set'}</small></div>`});
+ (S.ev||[]).forEach(function(e,i){if(e.date!==k)return;h+=`<div class='pc bzc'><b>${esc(e.title)}</b><br><small>${tm(e.s)}\u2013${tm(e.e)} \u00b7 ${e.kind==='free'?'study session'+(e.aid&&A(e.aid)?' · '+esc(A(e.aid).course):' · subject chosen by the planner'):'busy'}</small><div><button class='att' onclick='editEvC(${i})'>Edit</button><button class='att' onclick='delEv(${i})'>Delete</button></div></div>`});
  var ts=(S.t||[]).map(function(t,i){return{t:t,i:i}}).filter(function(r){return r.t.due===k||(k===td&&!r.t.done&&r.t.due&&r.t.due<td)});
  h+=`<div class='ncl' style='margin-top:16px'>To-do</div>`+(ts.length?ts.map(function(r){var t=r.t,od=!t.done&&t.due<td;return`<div class='item'><input type='checkbox' style='width:auto' aria-label='Done' ${t.done?'checked':''} onchange='togT(${r.i})'><div class='t' style='${t.done?'text-decoration:line-through;opacity:.6':''}'>${esc(t.title)}${od?` <small class='od'>overdue, was ${nice(pd(t.due))}</small>`:''}</div><button class='x' aria-label='Delete' onclick='delT(${r.i})'>\u00d7</button></div>`}).join(''):`<p class='empty'>Nothing to do.</p>`)+`<div class='row' style='margin-top:6px'><input id='dt' placeholder='Add a to-do for this day'><button class='go' data-k='${k}' onclick='addDT(this.dataset.k)'>Add</button></div>`;
- h+=`<div class='ncl' style='margin-top:16px'>Add event</div><input id='et' placeholder='Event title'><div class='row' style='margin:8px 0'><label>Date<input id='ed' type='date' value='${k}'></label><label>From<input id='es' type='time' value='10:00'></label><label>To<input id='ee' type='time' value='11:00'></label></div><div class='row'><label>Effect<select id='ek'><option value='busy'>Busy: no studying</option><option value='free'>Extra study time</option></select></label><button class='go' onclick='addE()'>Add event</button></div>`;
+ h+=`<div class='ncl' style='margin-top:16px'>Add event</div><input id='et' placeholder='Event title'><div class='row' style='margin:8px 0'><label>Date<input id='ed' type='date' value='${k}'></label><label>From<input id='es' type='time' value='10:00'></label><label>To<input id='ee' type='time' value='11:00'></label></div><div class='row'><label>Effect<select id='ek'><option value='busy'>Busy: no studying</option><option value='free'>Extra study session</option></select></label><label>Subject (study sessions)<select id='eka'>${subOpts()}</select></label><button class='go' onclick='addE()'>Add event</button></div>`;
  return h+'</aside>'}
 var SYK='sp1sync',SY='',syBusy=false,syT=null;
 function syc(){try{return JSON.parse(localStorage.getItem(SYK)||'{}')}catch(e){return{}}}
@@ -497,7 +507,7 @@ function offSync(){try{localStorage.removeItem(SYK)}catch(e){}syStatus('Disconne
 function syCard(){var c=syc(),on=!!c.token;return`<section class='card'><h2>Sync between devices</h2><p class='sub'>Saves your planner to a private GitHub repository so your phone and laptop show the same data. Uploaded files are not synced. The token stays on this device only.</p><div class='row'><label>Data repository (owner/name)<input id='syr' value='${esc(c.repo||'')}' placeholder='yourname/planner-data'></label><label>Access token<input id='syt' type='password' placeholder='${on?'Saved on this device':'github_pat_...'}' autocomplete='off'></label></div><div class='row'><button class='go' onclick='saveSync()'>Save and sync</button>${on?`<button class='x' onclick='syncNow()'>Sync now</button><button class='x' onclick='offSync()'>Disconnect</button>`:''}</div><p id='sys' class='empty'>${esc(SY||(on?'Connected.':'Not connected.'))}</p></section>`}
 function editEvC(i){E={k:'ev',i:i};draw()}
 function addDT(k){var t=V('dt').trim();if(!t)return;S.t=S.t||[];S.t.push({id:id(),title:t,due:k,prio:2,done:false});save();draw()}
-function emPick(d,q){var lim=S.rest===false?0:1,em=S.a.filter(function(a){return a.emg&&Math.round((pd(a.date)-d)/864e5)>lim}).sort(function(x,y){return x.date<y.date?-1:x.date>y.date?1:0});for(var i=0;i<em.length;i++){var it=q[em[i].id].filter(function(x){return x.rem>0})[0];if(it)return{a:em[i],it:it,room:1e9}}if(em.length)return{a:em[0],it:{name:'Extra practice: past exams and weak topics',rem:1e9,prep:1},room:1e9};return null}
+function emPick(d,q,t,aid){var lim=S.rest===false?0:1,dlf=function(a){return Math.round((pd(a.date)-d)/864e5)},rm=function(a){return dlf(a)===0?tmin(a.time)-60-t:1e9},em=S.a.filter(function(a){if(!a.emg||(aid&&aid!==a.id))return false;var dl=dlf(a);return dl>lim||(dl===0&&a.time&&t<tmin(a.time)-60)}).sort(function(x,y){return x.date<y.date?-1:x.date>y.date?1:0});for(var i=0;i<em.length;i++){var it=q[em[i].id].filter(function(x){return x.rem>0})[0];if(it)return{a:em[i],it:it,room:rm(em[i])}}if(em.length)return{a:em[0],it:{name:'Extra practice: past exams and weak topics',rem:1e9,prep:1},room:rm(em[0])};return null}
 function planHrs(p){var h={};p.out.forEach(function(x){h[x.a.course]=(h[x.a.course]||0)+(x.e-x.s)/60});return h}
 function togEmg(aid){var a=A(aid);if(!a)return;if(a.emg){a.emg=false;save();draw();return}
  var b=planHrs(plan());a.emg=true;var e=planHrs(plan());a.emg=false;
