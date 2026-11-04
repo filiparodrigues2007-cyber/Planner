@@ -132,7 +132,9 @@ function plan(){
   var ms=S.m.filter(function(m){return m.aid===a.id&&!m.done});
   var tot=S.m.filter(function(m){return m.aid===a.id}).reduce(function(s,m){return s+m.hours},0);
   var it=ms.map(function(m){return{name:m.name,rem:Math.max(0,Math.round(m.hours*60-(m.spent||0))),all:Math.round(m.hours*60),from:m.from||''}});
+  var rvs=[];if(!S.cfg||S.cfg.rvOn!==false){var gp=(S.cfg&&S.cfg.rvGap)||7;rvs=[];S.m.filter(function(m){return m.aid===a.id&&m.from}).forEach(function(m){var rv=Math.min(45,Math.max(20,Math.round(m.hours*60*0.25/5)*5)),rm=Math.max(0,rv-(m.rvSpent||0)),f0=pd(m.from);if(rm>0)rvs.push({name:'Review: '+m.name,rem:rm,all:rm,from:ymd(new Date(f0.getFullYear(),f0.getMonth(),f0.getDate()+gp)),rv:1})})}
   if(it.some(function(x){return x.from}))it.sort(function(x,y){return x.from<y.from?1:x.from>y.from?-1:0});
+  rvs.sort(function(x,y){return x.from<y.from?-1:x.from>y.from?1:0});it=it.concat(rvs);
   var pr=a.prep==null?7:a.prep;
   if(tot>0&&pr>0){var ph=Math.max(1,Math.round(tot*0.3*2)/2);it.push({name:'Mixed review of all materials',rem:Math.round(ph*0.4*60/15)*15||30,prep:1});it.push({name:'Past exams under exam conditions',rem:Math.round(ph*0.6*60/15)*15||30,prep:1})}
   it.forEach(function(x){x.all=x.rem});
@@ -143,7 +145,7 @@ function plan(){
  for(var k0=0;k0<=LI;k0++)hs.push(daySlots(new Date(today.getFullYear(),today.getMonth(),today.getDate()+k0)).length>0);
  for(var d=new Date(today);d<=last;d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1)){
   di++;var dm={},am={},mm={},pace={},cur=di-1;
-  S.a.forEach(function(a){var pr=a.prep==null?7:a.prep,ws=Math.round((pd(a.date)-today)/864e5)-Math.max(pr,S.rest===false?0:1),n=0;for(var k1=cur;k1<ws&&k1<hs.length;k1++)if(hs[k1])n++;var rm=q[a.id].filter(function(x){return !x.prep}).reduce(function(s,x){return s+x.rem},0);pace[a.id]=n>0?Math.max(30,Math.ceil(rm/n*1.15/15)*15):1e9;mm[a.id]=0});
+  S.a.forEach(function(a){var pr=a.prep==null?7:a.prep,ws=Math.round((pd(a.date)-today)/864e5)-Math.max(pr,S.rest===false?0:1),n=0;for(var k1=cur;k1<ws&&k1<hs.length;k1++)if(hs[k1])n++;var rm=q[a.id].filter(function(x){return !x.prep&&!x.rv}).reduce(function(s,x){return s+x.rem},0);pace[a.id]=n>0?Math.max(30,Math.ceil(rm/n*1.15/15)*15):1e9;mm[a.id]=0});
   (S.sl||[]).filter(function(l){return l.date===ymd(d)}).forEach(function(l){var kk=l.aid+'|'+l.name;dm[kk]=(dm[kk]||0)+l.e-l.s;am[l.aid]=(am[l.aid]||0)+l.e-l.s;mm[l.aid]=(mm[l.aid]||0)+l.e-l.s;last2[l.aid]=di});
   daySlots(d).forEach(function(b){
    var t=b.s;
@@ -152,7 +154,7 @@ function plan(){
     if(!best)S.a.forEach(function(a){
      var dl=Math.round((pd(a.date)-d)/864e5),cut=1440;if(b.aid&&b.aid!==a.id)return;if(dl<=(S.rest===false?0:1)){if(dl===0&&a.time){cut=tmin(a.time)-60;if(t>=cut)return}else return}
      var pr=a.prep==null?7:a.prep,it=null,room=0,urgent=dl<=3;
-     q[a.id].forEach(function(x){if(it||x.rem<=0)return;if(x.from&&x.from>ymd(d))return;if(x.prep){if(dl>pr)return;it=x;room=1e9;return}var used=dm[a.id+'|'+x.name]||0,left=pace[a.id]-mm[a.id];if((used<cap&&(left>0||b.x))||urgent){it=x;room=urgent?1e9:Math.min(cap-used,b.x?1e9:left)}});
+     q[a.id].forEach(function(x){if(it||x.rem<=0)return;if(x.from&&x.from>ymd(d))return;if(x.rv&&dl<=pr)return;if(x.prep){if(dl>pr)return;it=x;room=1e9;return}var used=dm[a.id+'|'+x.name]||0,left=pace[a.id]-mm[a.id];if((used<cap&&(left>0||b.x||x.rv))||urgent){it=x;room=urgent?1e9:Math.min(cap-used,(b.x||x.rv)?1e9:left)}});
      if(!it)return;
      var rem=q[a.id].reduce(function(s,x){return s+x.rem},0)/60,gap=last2[a.id]==null?3:Math.min(di-last2[a.id],6);
      var sc=Math.max(a.weight,1)*a.diff*rem/(dl+1)*(1+0.35*gap)/(1+(am[a.id]||0)/120);
@@ -161,14 +163,15 @@ function plan(){
     if(!best)break;
     var len=Math.min(b.e-t,best.it.rem,best.room);
     if(!(len>0))break;
-    out.push({date:new Date(d),s:t,e:t+len,a:best.a,name:best.it.name});
+    out.push({date:new Date(d),s:t,e:t+len,a:best.a,name:best.it.name,fx:b.aid?1:0});
     best.it.rem-=len;t+=len;
-    var key=best.a.id+'|'+best.it.name;dm[key]=(dm[key]||0)+len;am[best.a.id]=(am[best.a.id]||0)+len;if(!best.it.prep)mm[best.a.id]+=len;last2[best.a.id]=di;
+    var key=best.a.id+'|'+best.it.name;dm[key]=(dm[key]||0)+len;am[best.a.id]=(am[best.a.id]||0)+len;if(!best.it.prep&&!best.it.rv)mm[best.a.id]+=len;last2[best.a.id]=di;
    }
   });
  }
+ Object.keys(S.ord||{}).forEach(function(k){var bl=out.filter(function(x){return ymd(x.date)===k});if(bl.length<2)return;var nb=applyOrd(bl,k);out=out.filter(function(x){return ymd(x.date)!==k}).concat(nb)});out.sort(function(x,y){return(x.date-y.date)||(x.s-y.s)});
  var short=[];
- S.a.forEach(function(a){var r=q[a.id].reduce(function(s,x){return s+x.rem},0);if(r>0)short.push({a:a,h:r/60})});
+ S.a.forEach(function(a){var r=q[a.id].reduce(function(s,x){return s+(x.rv?0:x.rem)},0);if(r>0)short.push({a:a,h:r/60})});
  return{out:out,short:short};
 }
 function csv(out){
@@ -216,7 +219,7 @@ function viewSetup(){
 }
 function viewPlan(){
  if(!S.a.length||!S.v.length)return'<section class="card"><p class="empty">Add at least one assessment and one weekly time block to see your plan.</p></section>';
- var p=plan(),h=emgHtml()+sgHtml()+sessHtml()+'<section class="card"><h2>Hours planned per course</h2>';
+ var p=plan(),h=emgHtml()+ordHtml()+sgHtml()+sessHtml()+'<section class="card"><h2>Hours planned per course</h2>';
  var hrs={};p.out.forEach(function(x){hrs[x.a.course]=(hrs[x.a.course]||0)+(x.e-x.s)/60});
  var mx=Math.max.apply(null,Object.keys(hrs).map(function(k){return hrs[k]}).concat([1]));
  Object.keys(hrs).forEach(function(k){h+='<div><span class="bar" style="--c:'+color(k)+';width:'+Math.round(hrs[k]/mx*140)+'px"></span>'+esc(k)+' · '+hrs[k].toFixed(1)+' h</div>'});
@@ -228,7 +231,7 @@ function viewPlan(){
   var w=ymd(mon(x.date)),dk=ymd(x.date);
   if(w!==wk){wk=w;day='';h+='<div class="wk">Week of '+nice(mon(x.date))+'</div>'}
   if(dk!==day){if(day)h+='</div></div>';day=dk;h+='<div class="day"><b>'+DAYS[x.date.getDay()].slice(0,3)+' '+nice(x.date)+'</b><div>'}
-  h+='<div class="blk" style="--c:'+color(x.a.course)+'"><div><b>'+tm(x.s)+'\u2013'+tm(x.e)+'</b></div><div>'+esc(x.a.course)+': '+esc(x.name)+'<small>for '+esc(x.a.type)+' on '+nice(pd(x.a.date))+'</small>'+blkExtra(x,p.out.indexOf(x))+'</div></div>';
+  h+='<div class="blk" style="--c:'+color(x.a.course)+'"><div><b>'+tm(x.s)+'\u2013'+tm(x.e)+'</b></div><div>'+esc(x.a.course)+': '+esc(x.name)+'<small>for '+esc(x.a.type)+' on '+nice(pd(x.a.date))+'</small>'+blkExtra(x,p.out.indexOf(x),p)+'</div></div>';
  });
  if(day)h+='</div></div>';
  if(!p.out.length)h+='<p class="empty">No blocks fit before your deadlines. Check your dates and time blocks.</p>';
@@ -317,8 +320,8 @@ function daySlots(d){var k=ymd(d),ev=(S.ev||[]).filter(function(e){return e.date
  lg.forEach(function(e){all=cut(all,e)});
  return all.sort(function(a,b){return a.s-b.s})}
 function viewEvents(){S.ev=S.ev||[];var h=`<section class='card'><h2>4. One-off events</h2><p class='sub'>Something that happens once: a trip, an appointment, a free afternoon.</p><div class='row'><label>Title<input id='et' placeholder='e.g. Dentist'></label><label>Date<input id='ed' type='date'></label><label>From<input id='es' type='time' value='10:00'></label><label>To<input id='ee' type='time' value='11:00'></label><label>Effect<select id='ek'><option value='busy'>Busy: no studying</option><option value='free'>Extra study session</option></select></label><label>Subject (study sessions)<select id='eka'>${subOpts()}</select></label><button class='go' onclick='addE()'>Add event</button></div>`;
- if(!S.ev.length)h+=`<p class='empty'>No one-off events yet.</p>`;
- S.ev.forEach(function(e,i){h+=`<div class='item'><div class='t'>${esc(e.title)}<br><small>${nice(pd(e.date))} · ${tm(e.s)}–${tm(e.e)} · ${e.kind==='free'?'study session'+(e.aid&&A(e.aid)?' · '+esc(A(e.aid).course):' · subject chosen by the planner'):'busy'}</small></div><button class='x' aria-label='Edit' onclick='editEv(${i})'>Edit</button><button class='x' aria-label='Delete' onclick='delEv(${i})'>×</button></div>`});
+ if(!S.ev.filter(function(e){return!evPast(e)}).length)h+=`<p class='empty'>No upcoming one-off events.</p>`;
+ S.ev.forEach(function(e,i){if(evPast(e))return;h+=`<div class='item'><div class='t'>${esc(e.title)}<br><small>${nice(pd(e.date))} · ${tm(e.s)}–${tm(e.e)} · ${e.kind==='free'?'study session'+(e.aid&&A(e.aid)?' · '+esc(A(e.aid).course):' · subject chosen by the planner'):'busy'}</small></div><button class='x' aria-label='Edit' onclick='editEv(${i})'>Edit</button><button class='x' aria-label='Delete' onclick='delEv(${i})'>×</button></div>`});
  return h+'</section>'}
 function wk(n){W=new Date(W.getFullYear(),W.getMonth(),W.getDate()+7*n);draw()}
 function viewCal(){
@@ -327,7 +330,7 @@ function viewCal(){
  for(i=0;i<7;i++)days.push(new Date(W.getFullYear(),W.getMonth(),W.getDate()+i));
  var ks=days.map(ymd),lo=480,hi=1200,it=[];
  p.out.forEach(function(x){var k=ymd(x.date);if(ks.indexOf(k)>=0)it.push({k:k,s:x.s,e:x.e,t:x.a.course+': '+x.name,c:color(x.a.course),cls:'st'})});
- (S.ev||[]).forEach(function(e){if(ks.indexOf(e.date)<0)return;if(e.kind==='free'&&p.out.some(function(x){return ymd(x.date)===e.date&&x.s<e.e&&x.e>e.s}))return;it.push({k:e.date,s:e.s,e:e.e,t:e.title,cls:e.kind==='free'?'ex':'bz'})});
+ (S.ev||[]).forEach(function(e){if(ks.indexOf(e.date)<0||evPast(e))return;if(e.kind==='free'&&p.out.some(function(x){return ymd(x.date)===e.date&&x.s<e.e&&x.e>e.s}))return;it.push({k:e.date,s:e.s,e:e.e,t:e.title,cls:e.kind==='free'?'ex':'bz'})});
  S.a.forEach(function(a){if(a.time&&ks.indexOf(a.date)>=0)it.push({k:a.date,s:tmin(a.time),e:Math.min(tmin(a.time)+90,1439),t:'EXAM '+a.course,cls:'xm'})});
  it.forEach(function(x){lo=Math.min(lo,Math.floor(x.s/60)*60);hi=Math.max(hi,Math.ceil(x.e/60)*60)});
  var H=(hi-lo)/60*40,td=ymd(new Date());
@@ -357,6 +360,8 @@ function applyCfg(){var c=cfg(),r=document.documentElement;
  document.body.className=c.compact?'compact':''}
 function setTheme(v){cfg().theme=v;save();draw()}
 function setAccent(v){cfg().accent=v;save();draw()}
+function setRvGap(v){cfg().rvGap=Math.max(2,Math.min(30,+v||7));save();draw()}
+function setRvOn(v){cfg().rvOn=!!v;save();draw()}
 function setCap(v){cfg().cap=Math.max(0.5,+v||2);save();draw()}
 function setDens(v){cfg().compact=v==='1';save();draw()}
 function mvTab(i,d){var o=cfg().order,j=i+d;if(j<0||j>=o.length)return;var t=o[i];o[i]=o[j];o[j]=t;save();draw()}
@@ -365,7 +370,7 @@ function courseList(){var l=[];S.a.forEach(function(a){if(l.indexOf(a.course)<0)
 function setCC(i,v){var co=courseList()[i],c=cfg();if(v)c.cc[co]=v;else delete c.cc[co];save();draw()}
 function viewSettings(){var c=cfg(),cl=courseList(),h=`<section class='card'><h2>Look</h2><div class='row'><label>Theme<select onchange='setTheme(this.value)'><option value='auto'>Match my device</option><option value='light' ${c.theme==='light'?'selected':''}>Light</option><option value='dark' ${c.theme==='dark'?'selected':''}>Dark</option></select></label><label>Accent color<input type='color' value='${c.accent||'#2b1b24'}' onchange='setAccent(this.value)'></label><label>Spacing<select onchange='setDens(this.value)'><option value='0'>Comfortable</option><option value='1' ${c.compact?'selected':''}>Compact</option></select></label></div><button class='x' onclick='setAccent("")'>Reset accent color</button></section>`;
  h+=syCard();
- h+=`<section class='card'><h2>Study style</h2><div class='row'><label>Max hours on one topic per day<input type='number' min='0.5' max='8' step='0.5' value='${c.cap==null?2:c.cap}' onchange='setCap(this.value)'></label></div><p class='empty'>Keeps each topic spread over several days instead of one long session. Close to an exam the planner ignores this limit if it has to.</p></section>`;
+ h+=`<section class='card'><h2>Study style</h2><div class='row'><label>Max hours on one topic per day<input type='number' min='0.5' max='8' step='0.5' value='${c.cap==null?2:c.cap}' onchange='setCap(this.value)'></label><label>Short review after (days)<input type='number' min='2' max='30' value='${c.rvGap||7}' onchange='setRvGap(this.value)'></label><label style='flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;flex:0 0 auto'><input type='checkbox' style='width:auto' ${c.rvOn===false?'':'checked'} onchange='setRvOn(this.checked)'> Add a short review after each topic</label></div><p class='empty'>Keeps each topic spread over several days instead of one long session. Close to an exam the planner ignores this limit if it has to.</p></section>`;
  h+=`<section class='card'><h2>Course colors</h2>`;
  if(!cl.length)h+=`<p class='empty'>Add an assessment and its course will appear here.</p>`;
  cl.forEach(function(co,i){h+=`<div class='item' style='align-items:flex-start'><span class='dot' style='background:${color(co)};margin-top:8px'></span><div class='t'>${esc(co)}<div class='swr'>${swHtml(i)}</div></div><button class='x' onclick='setCC(${i},"")'>Reset</button></div>`});
@@ -406,12 +411,12 @@ function rmF(o,mid,fid){var m=(o==='t'?S.t:S.m).filter(function(x){return x.id==
 function rmL(o,mid,j){var m=(o==='t'?S.t:S.m).filter(function(x){return x.id===mid})[0];if(!m)return;m.links.splice(j,1);save();draw()}
 function attHtml(m,ro,o){if(!m)return'';o=o||'m';var h='';(m.files||[]).forEach(function(f){h+=`<button class='att' data-f='${f.id}' onclick='openF(this.dataset.f)'>${esc(f.name)}</button>`+(ro?'':`<button class='att' aria-label='Remove file' data-o='${o}' data-m='${m.id}' data-f='${f.id}' onclick='rmF(this.dataset.o,this.dataset.m,this.dataset.f)'>x</button>`)});(m.links||[]).forEach(function(l,j){h+=`<a class='att' href='${esc(l).replace(/'/g,'%27')}' target='_blank' rel='noopener'>link</a>`+(ro?'':`<button class='att' aria-label='Remove link' data-o='${o}' data-m='${m.id}' onclick='rmL(this.dataset.o,this.dataset.m,${j})'>x</button>`)});return h?`<div>${h}</div>`:''}
 function rateBar(x,ix){var n=new Date(),t=ymd(n),nm=n.getHours()*60+n.getMinutes(),k=ymd(x.date);if(k>t||(k===t&&x.s>nm))return'';return`<div style='margin-top:4px'><small>Rate this session: </small>${[1,2,3,4,5].map(function(r){return`<button class='att' onclick='logSess(${ix},${r})'>${r}</button>`}).join('')}<button class='att' onclick='logSess(${ix},0)'>Not finished</button></div>`}
-function blkExtra(x,ix){var m=S.m.filter(function(m){return m.aid===x.a.id&&m.name===x.name})[0];return attHtml(m,1)+rateBar(x,ix)}
-function logSess(ix,r){var x=plan().out[ix];if(!x)return;S.sl=S.sl||[];var m=S.m.filter(function(m){return m.aid===x.a.id&&m.name===x.name&&!m.done})[0],l={id:id(),date:ymd(x.date),s:x.s,e:x.e,aid:x.a.id,name:x.name,r:r};
- if(r>0&&m){m.spent=(m.spent||0)+(x.e-x.s);l.mid=m.id}
+function blkExtra(x,ix,p){var nm=x.name.replace(/^Review: /,''),m=S.m.filter(function(m){return m.aid===x.a.id&&m.name===nm})[0];return attHtml(m,1)+moveBar(x,ix,p)+rateBar(x,ix)}
+function logSess(ix,r){var x=plan().out[ix];if(!x)return;S.sl=S.sl||[];var rv=x.name.indexOf('Review: ')===0,mn=rv?x.name.slice(8):x.name,m=S.m.filter(function(m){return m.aid===x.a.id&&m.name===mn&&(rv||!m.done)})[0],l={id:id(),date:ymd(x.date),s:x.s,e:x.e,aid:x.a.id,name:x.name,r:r,rv:rv};
+ if(r>0&&m){if(rv)m.rvSpent=(m.rvSpent||0)+(x.e-x.s);else m.spent=(m.spent||0)+(x.e-x.s);l.mid=m.id}
  S.sl.push(l);if(r<=2){S.sg=S.sg||[];S.sg.push({id:id(),aid:x.a.id,name:x.name,min:Math.max(30,Math.round((x.e-x.s)/2/15)*15),after:m?m.id:''})}
  save();draw()}
-function undoSess(i){var l=S.sl[i];if(!l)return;if(l.mid){var m=S.m.filter(function(x){return x.id===l.mid})[0];if(m)m.spent=Math.max(0,(m.spent||0)-(l.e-l.s))}S.sl.splice(i,1);save();draw()}
+function undoSess(i){var l=S.sl[i];if(!l)return;if(l.mid){var m=S.m.filter(function(x){return x.id===l.mid})[0];if(m){if(l.rv)m.rvSpent=Math.max(0,(m.rvSpent||0)-(l.e-l.s));else m.spent=Math.max(0,(m.spent||0)-(l.e-l.s))}}S.sl.splice(i,1);save();draw()}
 function addSg(i){var g=S.sg[i];if(!g)return;var m={id:id(),aid:g.aid,name:'Extra review: '+g.name,hours:g.min/60,done:false,extra:true},p=S.m.map(function(x){return x.id}).indexOf(g.after);if(p>=0)S.m.splice(p+1,0,m);else S.m.push(m);S.sg.splice(i,1);save();draw()}
 function noSg(i){S.sg.splice(i,1);save();draw()}
 function sgHtml(){var l=S.sg||[];if(!l.length)return'';return`<section class='card'><h2>Suggested extra sessions</h2>`+l.map(function(g,i){var a=A(g.aid);return`<div class='item'><div class='t'>${esc(g.name)}${a?' ('+esc(a.course)+')':''} did not go well.<br><small>Add an extra ${g.min}-minute block for it before the exam?</small></div><button class='go' onclick='addSg(${i})'>Add block</button><button class='x' onclick='noSg(${i})'>Dismiss</button></div>`}).join('')+'</section>'}
@@ -460,11 +465,11 @@ function notesHtml(i){var p=S.pj[i];p.nt=p.nt||[];var C=[['idea','Ideas'],['expl
  C.forEach(function(c,ci){h+=`<div class='nc'><div class='ncl'>${c[1]}</div>`+p.nt.map(function(n,j){return{n:n,j:j}}).filter(function(r){return r.n.c===c[0]}).map(function(r){return`<div class='nt'><textarea aria-label='Note' onchange='saveNote(${i},${r.j},this.value)'>${esc(r.n.x)}</textarea><div>${ci>0?`<button class='att' aria-label='Move left' onclick='mvNote(${i},${r.j},-1)'>\u2190</button>`:''}${ci<2?`<button class='att' aria-label='Move right' onclick='mvNote(${i},${r.j},1)'>\u2192</button>`:''}<button class='att' onclick='delNote(${i},${r.j})'>Delete</button></div></div>`}).join('')+'</div>'});
  return h+'</div></div>'}
 function selDay(k){CD=k;draw()}
-function dayPanel(p,k){var d=pd(k),td=ymd(new Date()),bl=p.out.filter(function(x){return ymd(x.date)===k}),lg=(S.sl||[]).filter(function(l){return l.date===k}),all=bl.map(function(x){return{s:x.s,e:x.e,a:x.a,n:x.name,d:0}}).concat(lg.map(function(l){return{s:l.s,e:l.e,a:A(l.aid),n:l.name,d:1,r:l.r}})).sort(function(x,y){return x.s-y.s}),mins=all.reduce(function(s,x){return s+x.e-x.s},0),dn=all.filter(function(x){return x.d&&x.r>0}).length;
+function dayPanel(p,k){var d=pd(k),td=ymd(new Date()),bl=p.out.filter(function(x){return ymd(x.date)===k}),lg=(S.sl||[]).filter(function(l){return l.date===k}),all=bl.map(function(x){return{s:x.s,e:x.e,a:x.a,n:x.name,d:0,x:x,ix:p.out.indexOf(x)}}).concat(lg.map(function(l){return{s:l.s,e:l.e,a:A(l.aid),n:l.name,d:1,r:l.r}})).sort(function(x,y){return x.s-y.s}),mins=all.reduce(function(s,x){return s+x.e-x.s},0),dn=all.filter(function(x){return x.d&&x.r>0}).length;
  var h=`<aside class='dp'><div class='dpt'>${DAYS[d.getDay()].toLowerCase()}</div><div class='dps'>${nice(d)}</div><div class='row'><div class='st2'>PLANNED<b>${(mins/60).toFixed(1).replace('.0','')}h</b></div><div class='st2'>DONE<b>${dn}/${all.length}</b></div></div>`;
- h+=all.length?all.map(function(x){return`<div class='pc' style='--c:${x.a?color(x.a.course):'#e8dde1'}'><b>${esc(x.n)}</b><br><small>${tm(x.s)} \u00b7 ${x.e-x.s}m${x.a?' \u00b7 '+esc(x.a.course):''}${x.d?' \u00b7 '+(x.r?'done, '+x.r+'/5':'not finished'):''}</small></div>`}).join(''):`<p class='empty'>No study blocks this day.</p>`;
+ h+=all.length?all.map(function(x){return`<div class='pc' style='--c:${x.a?color(x.a.course):'#e8dde1'}'><b>${esc(x.n)}</b><br><small>${tm(x.s)} \u00b7 ${x.e-x.s}m${x.a?' \u00b7 '+esc(x.a.course):''}${x.d?' \u00b7 '+(x.r?'done, '+x.r+'/5':'not finished'):''}</small>${x.d?'':moveBar(x.x,x.ix,p)}</div>`}).join(''):`<p class='empty'>No study blocks this day.</p>`;
  S.a.filter(function(a){return a.date===k}).forEach(function(a){h+=`<div class='pc' style='--c:${color(a.course)};border:2px solid var(--ink)'><b>${esc(a.type)}: ${esc(a.course)}</b><br><small>${a.time?'Starts at '+a.time:'Start time not set'}</small></div>`});
- (S.ev||[]).forEach(function(e,i){if(e.date!==k)return;h+=`<div class='pc bzc'><b>${esc(e.title)}</b><br><small>${tm(e.s)}\u2013${tm(e.e)} \u00b7 ${e.kind==='free'?'study session'+(e.aid&&A(e.aid)?' · '+esc(A(e.aid).course):' · subject chosen by the planner'):'busy'}</small><div><button class='att' onclick='editEvC(${i})'>Edit</button><button class='att' onclick='delEv(${i})'>Delete</button></div></div>`});
+ (S.ev||[]).forEach(function(e,i){if(e.date!==k||evPast(e))return;h+=`<div class='pc bzc'><b>${esc(e.title)}</b><br><small>${tm(e.s)}\u2013${tm(e.e)} \u00b7 ${e.kind==='free'?'study session'+(e.aid&&A(e.aid)?' · '+esc(A(e.aid).course):' · subject chosen by the planner'):'busy'}</small><div><button class='att' onclick='editEvC(${i})'>Edit</button><button class='att' onclick='delEv(${i})'>Delete</button></div></div>`});
  var ts=(S.t||[]).map(function(t,i){return{t:t,i:i}}).filter(function(r){return r.t.due===k||(k===td&&!r.t.done&&r.t.due&&r.t.due<td)});
  h+=`<div class='ncl' style='margin-top:16px'>To-do</div>`+(ts.length?ts.map(function(r){var t=r.t,od=!t.done&&t.due<td;return`<div class='item'><input type='checkbox' style='width:auto' aria-label='Done' ${t.done?'checked':''} onchange='togT(${r.i})'><div class='t' style='${t.done?'text-decoration:line-through;opacity:.6':''}'>${esc(t.title)}${od?` <small class='od'>overdue, was ${nice(pd(t.due))}</small>`:''}</div><button class='x' aria-label='Delete' onclick='delT(${r.i})'>\u00d7</button></div>`}).join(''):`<p class='empty'>Nothing to do.</p>`)+`<div class='row' style='margin-top:6px'><input id='dt' placeholder='Add a to-do for this day'><button class='go' data-k='${k}' onclick='addDT(this.dataset.k)'>Add</button></div>`;
  h+=`<div class='ncl' style='margin-top:16px'>Add event</div><input id='et' placeholder='Event title'><div class='row' style='margin:8px 0'><label>Date<input id='ed' type='date' value='${k}'></label><label>From<input id='es' type='time' value='10:00'></label><label>To<input id='ee' type='time' value='11:00'></label></div><div class='row'><label>Effect<select id='ek'><option value='busy'>Busy: no studying</option><option value='free'>Extra study session</option></select></label><label>Subject (study sessions)<select id='eka'>${subOpts()}</select></label><button class='go' onclick='addE()'>Add event</button></div>`;
@@ -548,6 +553,20 @@ var PAL=['#f4b6c6','#f9c9b6','#fde2a7','#d9e8a8','#b8e6c8','#a9e0e0','#b7d4f4','
 function swHtml(i){var co=courseList()[i],cur=String(color(co)).toLowerCase();return PAL.map(function(c){return`<button class='sw${c===cur?' on':''}' style='background:${c}' aria-label='Use this color' data-c='${c}' onclick='setCC(${i},this.dataset.c)'></button>`}).join('')+`<input type='color' class='swc' value='${cur}' aria-label='Custom color' onchange='setCC(${i},this.value)'>`}
 function toggCP(i){CPi=CPi===i?-1:i;draw()}
 function legendHtml(){var cl=courseList();if(!cl.length)return'';return`<div style='margin:4px 0 10px'>`+cl.map(function(co,i){return`<button class='lg' style='--c:${color(co)}' onclick='toggCP(${i})'><i></i>${esc(co)}</button>`}).join('')+(CPi>=0&&cl[CPi]?`<div class='swr'>${swHtml(CPi)}</div>`:'')+`</div>`}
+var PASTN=0;
+function evPast(e){var n=new Date();return e.date<ymd(n)||(e.date===ymd(n)&&e.e<=n.getHours()*60+n.getMinutes())}
+function pruneAll(){var t=ymd(new Date()),n0=(S.ev||[]).length,o0=Object.keys(S.ord||{}).length;S.ev=(S.ev||[]).filter(function(e){return e.date>=t});Object.keys(S.ord||{}).forEach(function(k){if(k<t)delete S.ord[k]});PASTN=S.ev.filter(evPast).length;if(S.ev.length!==n0||Object.keys(S.ord||{}).length!==o0)save()}
+function unitsOf(blks){var u=[],cnt={};blks.forEach(function(x){var k0=x.a.id+'|'+x.name,l=u[u.length-1];if(l&&l.k0===k0){l.len+=x.e-x.s;l.bl.push(x);return}u.push({k0:k0,a:x.a,name:x.name,len:x.e-x.s,first:x,bl:[x]})});u.forEach(function(un){cnt[un.k0]=(cnt[un.k0]||0)+1;un.k=un.k0+'#'+cnt[un.k0]});return u}
+function applyOrd(blks,key){var ord=(S.ord||{})[key];if(!ord||!ord.length)return blks;var mv=blks.filter(function(x){return!x.fx}),fx=blks.filter(function(x){return x.fx});if(mv.length<2)return blks;
+ var u=unitsOf(mv),rng=[];mv.forEach(function(x){var l=rng[rng.length-1];if(l&&l.e===x.s)l.e=x.e;else rng.push({s:x.s,e:x.e})});
+ var ix=function(k){var i=ord.indexOf(k);return i<0?1e6:i},us=u.map(function(un,i){return{u:un,i:i}}).sort(function(a,b){return(ix(a.u.k)-ix(b.u.k))||(a.i-b.i)}).map(function(o){return o.u}),res=[],ri=0,pos=rng[0].s;
+ us.forEach(function(un){var left=un.len;while(left>0&&ri<rng.length){var take=Math.min(rng[ri].e-pos,left);res.push({date:new Date(un.first.date),s:pos,e:pos+take,a:un.a,name:un.name,fx:0});pos+=take;left-=take;if(pos>=rng[ri].e){ri++;if(rng[ri])pos=rng[ri].s}}});
+ return res.concat(fx).sort(function(a,b){return a.s-b.s})}
+function dayUnitsOf(p,x){return unitsOf(p.out.filter(function(b){return ymd(b.date)===ymd(x.date)&&!b.fx}))}
+function moveBar(x,ix,p){if(!p||x.fx)return'';var u=dayUnitsOf(p,x),j=-1;u.forEach(function(un,t){if(un.bl.indexOf(x)>=0)j=t});if(u.length<2||j<0)return'';return`<div>`+(j>0?`<button class='att' onclick='mvBlk(${ix},-1)'>\u2191 Earlier</button>`:'')+(j<u.length-1?`<button class='att' onclick='mvBlk(${ix},1)'>\u2193 Later</button>`:'')+`</div>`}
+function mvBlk(ix,dir){var p=plan(),x=p.out[ix];if(!x||x.fx)return;var u=dayUnitsOf(p,x),j=-1;u.forEach(function(un,t){if(un.bl.indexOf(x)>=0)j=t});if(j<0||j+dir<0||j+dir>=u.length)return;var t=u[j];u[j]=u[j+dir];u[j+dir]=t;S.ord=S.ord||{};S.ord[ymd(x.date)]=u.map(function(un){return un.k});save();draw()}
+function resetOrd(k){if(S.ord)delete S.ord[k];save();draw()}
+function ordHtml(){var t=ymd(new Date()),l=Object.keys(S.ord||{}).filter(function(k){return k>=t}).sort();if(!l.length)return'';return`<section class='card'><h2>Custom order</h2><p class='sub'>You changed the order of the study blocks on these days.</p>`+l.map(function(k){return`<div class='item'><div class='t'>${nice(pd(k))}</div><button class='x' data-k='${k}' onclick='resetOrd(this.dataset.k)'>Reset order</button></div>`}).join('')+'</section>'}
 function viewBackup(){return'<section class="card"><h2>Back up your data</h2><p class="sub">Copy this text and keep it somewhere safe, such as a Notion page or a note. It holds everything you entered, except uploaded files: those stay on the device where you added them.</p><textarea id="bk" readonly>'+esc(JSON.stringify(S))+'</textarea><div class="row" style="margin-top:10px"><button class="go" onclick="cpb()">Copy backup</button><span id="bm" class="empty"></span></div></section><section class="card"><h2>Restore from a backup</h2><p class="sub">Paste a backup below. It replaces what is in the planner now.</p><textarea id="rs" placeholder="Paste your backup here"></textarea><div class="row" style="margin-top:10px"><button class="go" onclick="restoreData()">Restore</button><span id="rm" class="empty"></span></div></section>'}
 function cpb(){var t=document.getElementById('bk');t.select();var ok=false;try{ok=document.execCommand('copy')}catch(e){}document.getElementById('bm').textContent=ok?'Copied.':'Select the text and copy it manually.'}
 function restoreData(){var t=V('rs').trim(),m=document.getElementById('rm');try{var o=JSON.parse(t);if(!o||!Array.isArray(o.a)||!Array.isArray(o.m)||!Array.isArray(o.v))throw 0;S=o;S.ev=S.ev||[];S.t=S.t||[];E={};save();m.textContent='Restored. Open the Setup or Plan tab to see it.'}catch(e){m.textContent='That does not look like a backup. Copy the whole text and try again.'}}
@@ -557,8 +576,9 @@ function draw(){
  document.getElementById('nav').innerHTML=tabs.map(function(t){return'<button aria-pressed="'+(tab===t[0])+'" onclick="tab=\''+t[0]+'\';draw()">'+ico(t[0])+'<span>'+t[1]+'</span></button>'}).join('');
  document.getElementById('app').innerHTML=tab==='setup'?viewSetup()+viewEvents():tab==='calendar'?viewCal():tab==='tasks'?viewTasks():tab==='settings'?viewSettings():tab==='review'?viewReview():tab==='habits'?viewHabits():tab==='projects'?viewProjects():tab==='plan'?viewPlan():tab==='backup'?viewBackup():viewExport();applyEdit();wireBoards();
 }
-tab=navTabs()[0][0];draw();syncNow();
-document.addEventListener('visibilitychange',function(){if(!document.hidden)syncNow()});
+tab=navTabs()[0][0];pruneAll();draw();syncNow();
+document.addEventListener('visibilitychange',function(){if(!document.hidden){pruneAll();var sn=snapForm();draw();restoreForm(sn);syncNow()}});
+setInterval(function(){if(document.hidden)return;var n=(S.ev||[]).filter(evPast).length;if(n!==PASTN){pruneAll();var sn=snapForm();draw();restoreForm(sn)}},60000);
 </script>
 <script>
 if('serviceWorker' in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
